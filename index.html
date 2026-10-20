@@ -103,6 +103,8 @@
     .bombando-info{padding:9px 10px 12px}
     .bombando-info .titulo{font-size:12.5px;font-weight:700;line-height:1.3;margin-bottom:4px}
     .bombando-info .nota{font-size:11px;color:var(--yellow)}
+    .bombando-pedir{display:block;margin-top:9px;background:#25D366;color:#062b12;font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;text-align:center;padding:7px 6px;border-radius:6px;text-decoration:none}
+    .bombando-pedir:hover{filter:brightness(1.1)}
     .bombando-credito{font-size:10.5px;color:var(--gray);margin-top:16px}
     .bombando-credito a{color:var(--cyan)}
     @keyframes glitch{0%,95%,100%{opacity:1;transform:none}96%{opacity:.7;transform:translateX(-2px);text-shadow:-2px 0 var(--pink),2px 0 var(--cyan)}97%{opacity:.9;transform:translateX(2px)}98%{opacity:.6}}
@@ -596,35 +598,47 @@
   // Sua chave gratuita da OMDb (1.000 buscas/dia)
   var OMDB_KEY = "3a8a8aac";
 
-  // Séries — edite os nomes livremente (busca automática na TVmaze)
+  // WhatsApp de vendas (com DDI 55)
+  var WHATS = "5531991155296";
+
+  // Séries — "busca" é o termo em inglês/original pra achar na TVmaze, "nome" é o nome exibido no site (sempre em português).
+  // "ano" (opcional) escolhe a série certa quando o nome é genérico (ex.: "Below").
   var SERIES = [
-    "Reacher",
-    "The Mentalist",
-    "Grey's Anatomy",
-    "Jogada de Risco",
-    "Beauty in Black",
-    "Supernatural"
+    { busca: "Below", ano: "2026", nome: "Profundezas" },
+    { busca: "The Diplomat", nome: "A Diplomata" },
+    { busca: "Percy Jackson and the Olympians", nome: "Percy Jackson e os Olimpianos" },
+    { busca: "Beauty in Black", nome: "Beauty in Black" }
   ];
 
-  // Filmes — use o título em inglês (ou o mais próximo do original) pra melhor acerto (busca na OMDb)
+  // Filmes — "imdbId" é o ID exato do IMDb (busca sempre por ID na OMDb, nunca por texto), "nome" é o nome exibido (sempre em português)
   var FILMES = [
-    { titulo: "Minions & Monsters", ano: "2026" },
-    { titulo: "Evil Dead Burn", ano: "2026" },
-    { titulo: "Spider-Man: Brand New Day", ano: "2026" },
-    { titulo: "Toy Story 5", ano: "2026" }
+    { imdbId: "tt32261958", nome: "Verity" },
+    { imdbId: "tt27419420", nome: "Street Fighter" },
+    { imdbId: "tt31049299", nome: "Sobrevivência" },
+    { imdbId: "tt28535715", nome: "Dentro da Baleia" },
+    { imdbId: "tt35538033", nome: "Resident Evil" },
+    { imdbId: "tt31170389", nome: "Evil Dead Burn" }
   ];
 
   var statusEl = document.getElementById('bombandoStatus');
   var gridEl = document.getElementById('bombandoGrid');
   var btnEl = document.getElementById('bombandoBtn');
 
-  function buscarSerie(nome){
-    var url = 'https://api.tvmaze.com/singlesearch/shows?q=' + encodeURIComponent(nome);
+  function buscarSerie(item){
+    var url = item.ano
+      ? 'https://api.tvmaze.com/search/shows?q=' + encodeURIComponent(item.busca)
+      : 'https://api.tvmaze.com/singlesearch/shows?q=' + encodeURIComponent(item.busca);
     return fetch(url).then(function(res){ return res.ok ? res.json() : null; })
-      .then(function(s){
+      .then(function(r){
+        var s = r;
+        if(item.ano){
+          var lista = (r || []).map(function(x){ return x.show; });
+          s = lista.filter(function(x){ return x.premiered && x.premiered.indexOf(item.ano) === 0; })[0] || lista[0];
+        }
         if(!s) return null;
         return {
-          nome: s.name,
+          nome: item.nome, // nome sempre em português, nunca o retornado pela API
+          tipo: 'série',
           poster: (s.image && s.image.medium) ? s.image.medium.replace('_medium_portrait','_large_portrait') : null,
           nota: (s.rating && s.rating.average) ? s.rating.average.toFixed(1) : null
         };
@@ -632,14 +646,14 @@
   }
 
   function buscarFilme(item){
-    var url = 'https://www.omdbapi.com/?apikey=' + OMDB_KEY
-      + '&t=' + encodeURIComponent(item.titulo)
-      + (item.ano ? '&y=' + item.ano : '');
+    // Busca sempre pelo ID exato do IMDb (i=), nunca por texto (t=) — busca por texto falha
+    var url = 'https://www.omdbapi.com/?apikey=' + OMDB_KEY + '&i=' + encodeURIComponent(item.imdbId);
     return fetch(url).then(function(res){ return res.json(); })
       .then(function(f){
         if(!f || f.Response === 'False') return null;
         return {
-          nome: f.Title,
+          nome: item.nome, // nome sempre em português, nunca o retornado pela API
+          tipo: 'filme',
           poster: (f.Poster && f.Poster !== 'N/A') ? f.Poster : null,
           nota: (f.imdbRating && f.imdbRating !== 'N/A') ? f.imdbRating : null
         };
@@ -664,6 +678,11 @@
     });
   }
 
+  function linkZap(item){
+    var msg = 'Olá! Quero assistir agora o ' + item.tipo + ' "' + item.nome + '". Pode me liberar?';
+    return 'https://wa.me/' + WHATS + '?text=' + encodeURIComponent(msg);
+  }
+
   function renderizar(itens){
     if(statusEl) statusEl.style.display='none';
     gridEl.innerHTML = '';
@@ -677,6 +696,7 @@
         '<div class="bombando-info">'+
           '<div class="titulo">'+item.nome+'</div>'+
           '<div class="nota">★ '+nota+'</div>'+
+          '<a class="bombando-pedir" target="_blank" rel="noopener" href="'+linkZap(item)+'">▶ Assistir agora</a>'+
         '</div>';
       gridEl.appendChild(card);
     });
